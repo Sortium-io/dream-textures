@@ -78,6 +78,7 @@ def dream_texture_panels():
                                 get_seamless_result=get_seamless_result)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, size_panel, get_prompt)
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, init_image_panels, get_prompt)
+        yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, control_net_panel, get_prompt)
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, advanced_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, actions_panel, get_prompt)
 
@@ -95,8 +96,8 @@ def create_panel(space_type, region_type, parent_id, ctor, get_prompt, use_prope
 
         def draw(self, context):
             self.layout.use_property_decorate = use_property_decorate
-    
-    return ctor(SubPanel, space_type, get_prompt, **kwargs)
+
+    return ctor(kwargs.pop('base_panel', SubPanel), space_type, get_prompt, **kwargs)
 
 def prompt_panel(sub_panel, space_type, get_prompt, get_seamless_result=None):
     class PromptPanel(sub_panel):
@@ -236,6 +237,24 @@ def init_image_panels(sub_panel, space_type, get_prompt):
                     layout.template_ID(context.scene, "init_depth", open="image.open")
     yield InitImagePanel
 
+def control_net_panel(sub_panel, space_type, get_prompt):
+    class ControlNetPanel(sub_panel):
+        """Create a subpanel for ControlNet options"""
+        bl_idname = f"DREAM_PT_dream_panel_control_net_{space_type}"
+        bl_label = "ControlNet"
+        bl_options = {'DEFAULT_CLOSED'}
+
+        def draw(self, context):
+            layout = self.layout
+            prompt = get_prompt(context)
+            
+            row = layout.row()
+            row.template_list("SCENE_UL_ControlNetList", "", prompt, "control_nets", prompt, "active_control_net")
+            col = row.column(align=True)
+            col.operator("dream_textures.control_nets_add", icon='ADD', text="")
+            col.operator("dream_textures.control_nets_remove", icon='REMOVE', text="")
+    return ControlNetPanel
+
 def advanced_panel(sub_panel, space_type, get_prompt):
     class AdvancedPanel(sub_panel):
         """Create a subpanel for advanced options"""
@@ -262,11 +281,14 @@ def advanced_panel(sub_panel, space_type, get_prompt):
 
     yield AdvancedPanel
 
+    yield from optimization_panels(sub_panel, space_type, get_prompt, AdvancedPanel.bl_idname)
+
+def optimization_panels(sub_panel, space_type, get_prompt, parent_id=""):
     class SpeedOptimizationPanel(sub_panel):
         """Create a subpanel for speed optimizations"""
         bl_idname = f"DREAM_PT_dream_panel_speed_optimizations_{space_type}"
         bl_label = "Speed Optimizations"
-        bl_parent_id = AdvancedPanel.bl_idname
+        bl_parent_id = parent_id
 
         def draw(self, context):
             super().draw(context)
@@ -275,24 +297,25 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             prompt = get_prompt(context)
 
             inferred_device = Optimizations.infer_device()
+            if prompt.optimizations_cpu_only:
+                inferred_device = "cpu"
             def optimization(prop):
-                if hasattr(prompt, f"optimizations_{prop}"):
-                    if Optimizations().can_use(prop, inferred_device):
-                        layout.prop(prompt, f"optimizations_{prop}")
+                if Optimizations.device_supports(prop, inferred_device):
+                    layout.prop(prompt, f"optimizations_{prop}")
 
             optimization("cudnn_benchmark")
             optimization("tf32")
-            optimization("amp")
             optimization("half_precision")
             optimization("channels_last_memory_format")
             optimization("batch_size")
+            optimization("cfg_end")
     yield SpeedOptimizationPanel
 
     class MemoryOptimizationPanel(sub_panel):
         """Create a subpanel for memory optimizations"""
         bl_idname = f"DREAM_PT_dream_panel_memory_optimizations_{space_type}"
         bl_label = "Memory Optimizations"
-        bl_parent_id = AdvancedPanel.bl_idname
+        bl_parent_id = parent_id
 
         def draw(self, context):
             super().draw(context)
@@ -300,8 +323,11 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             layout.use_property_split = True
             prompt = get_prompt(context)
 
+            inferred_device = Optimizations.infer_device()
+            if prompt.optimizations_cpu_only:
+                inferred_device = "cpu"
             def optimization(prop):
-                if hasattr(prompt, f"optimizations_{prop}"):
+                if Optimizations.device_supports(prop, inferred_device):
                     layout.prop(prompt, f"optimizations_{prop}")
 
             optimization("attention_slicing")
@@ -309,10 +335,14 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             slice_size_row.prop(prompt, "optimizations_attention_slice_size_src")
             if prompt.optimizations_attention_slice_size_src == 'manual':
                 slice_size_row.prop(prompt, "optimizations_attention_slice_size", text="Size")
-            optimization("sequential_cpu_offload")
+            optimization("sdp_attention")
+            optimization("cpu_offload")
             optimization("cpu_only")
-            # optimization("xformers_attention") # FIXME: xFormers is not yet available.
             optimization("vae_slicing")
+            optimization("vae_tiling")
+            if prompt.optimizations_vae_tiling == "manual":
+                optimization("vae_tile_size")
+                optimization("vae_tile_blend")
     yield MemoryOptimizationPanel
 
 def actions_panel(sub_panel, space_type, get_prompt):
@@ -348,6 +378,12 @@ def actions_panel(sub_panel, space_type, get_prompt):
             if CancelGenerator.poll(context):
                 row.operator(CancelGenerator.bl_idname, icon="CANCEL", text="")
             row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
+
+            if context.scene.dream_textures_last_execution_time != "":
+                r = layout.row()
+                r.scale_x = 0.5
+                r.scale_y = 0.5
+                r.label(text=context.scene.dream_textures_last_execution_time, icon="SORTTIME")
 
             # Validation
             try:

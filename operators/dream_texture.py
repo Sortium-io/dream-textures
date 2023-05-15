@@ -10,6 +10,7 @@ from ..prompt_engineering import *
 from ..generator_process import Generator
 from ..generator_process.actions.prompt_to_image import ImageGenerationResult, Pipeline
 from ..generator_process.actions.huggingface_hub import ModelType
+import time
 
 def bpy_image(name, width, height, pixels, existing_image):
     if existing_image is not None and (existing_image.size[0] != width or existing_image.size[1] != height):
@@ -89,8 +90,10 @@ class DreamTexture(bpy.types.Operator):
         scene.dream_textures_info = "Starting..."
 
         last_data_block = None
+        execution_start = time.time()
         def step_callback(_, step_image: ImageGenerationResult):
             nonlocal last_data_block
+            scene.dream_textures_last_execution_time = f"{time.time() - execution_start:.2f} seconds"
             if step_image.final:
                 return
             scene.dream_textures_progress = step_image.step
@@ -135,7 +138,14 @@ class DreamTexture(bpy.types.Operator):
                 scene.dream_textures_prompt.hash = image_hash
                 history_entry = context.scene.dream_textures_history.add()
                 for key, value in history_template.items():
-                    setattr(history_entry, key, value)
+                    match key:
+                        case 'control_nets':
+                            for net in value:
+                                n = history_entry.control_nets.add()
+                                for prop in n.__annotations__.keys():
+                                    setattr(n, prop, getattr(net, prop))
+                        case _:
+                            setattr(history_entry, key, value)
                 history_entry.seed = str(seed)
                 history_entry.hash = image_hash
                 if is_file_batch:
@@ -144,11 +154,6 @@ class DreamTexture(bpy.types.Operator):
             if iteration < iteration_limit and not future.cancelled:
                 generate_next()
             else:
-                print("Looking for DreamTexture Output", image)
-                dreamtexture_image_output = bpy.data.images.new(name="DreamTexture Temp", width=image.size[0], height=image.size[1])
-                dreamtexture_image_output.pixels = image.pixels[:]
-                dreamtexture_image_output.name = "DreamTexture Output"
-                print("DreamTexture Output", dreamtexture_image_output)
                 scene.dream_textures_info = ""
                 scene.dream_textures_progress = 0
 
@@ -175,7 +180,13 @@ class DreamTexture(bpy.types.Operator):
             else:
                 generated_args["prompt"] = [original_prompt] * batch_size
                 generated_args["negative_prompt"] = [original_negative_prompt] * batch_size
-            if init_image is not None:
+            if len(generated_args['control_net']) > 0:
+                f = gen.control_net(
+                    image=init_image,
+                    inpaint=generated_args['init_img_action'] == 'inpaint',
+                    **generated_args
+                )
+            elif init_image is not None:
                 match generated_args['init_img_action']:
                     case 'modify':
                         models = list(filter(
