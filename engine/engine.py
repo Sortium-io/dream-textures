@@ -1,4 +1,5 @@
 import bpy
+import tempfile
 import gpu
 from bl_ui.properties_render import RenderButtonsPanel
 from bl_ui.properties_output import RenderOutputButtonsPanel
@@ -71,6 +72,17 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
             z = depth.render_depth_map(depsgraph, invert=True)
             result.layers[0].passes["Depth"].rect = z.reshape((scene.render.resolution_x * scene.render.resolution_y, 1))
         
+        temp_file = tempfile.NamedTemporaryFile(suffix=".png")
+        temp_file.close()
+        bpy.data.images["Render Result"].save_render(temp_file.name)
+        dream_texture_result = bpy.data.images.load(temp_file.name)
+        if "Render Result Temp" in bpy.data.images:
+            print("Removing old Render Result Temp")
+            bpy.data.images.remove(bpy.data.images["Render Result Temp"])
+        dream_texture_result.name = "Render Result Temp"
+        print("Finished rendering", dream_texture_result)
+        print(dream_texture_result.filepath_raw)
+
         self.end_result(result)
     
     def update_render_passes(self, scene=None, renderlayer=None):
