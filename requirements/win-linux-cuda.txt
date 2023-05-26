@@ -1,4 +1,4 @@
-git+https://github.com/huggingface/diffusers@main#egg=diffusers
+git+https://github.com/huggingface/diffusers@v0.16.0#egg=diffusers
 transformers==4.28.1
 accelerate==0.18.0
 huggingface_hub==0.13.4
