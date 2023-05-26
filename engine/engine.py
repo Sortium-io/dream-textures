@@ -1,6 +1,6 @@
 import bpy
-import tempfile
 import gpu
+import tempfile
 from bl_ui.properties_render import RenderButtonsPanel
 from bl_ui.properties_output import RenderOutputButtonsPanel
 from bl_ui.properties_view_layer import ViewLayerButtonsPanel
