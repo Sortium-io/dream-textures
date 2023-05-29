@@ -1,17 +1,17 @@
-git+https://github.com/huggingface/diffusers@main#egg=diffusers
-transformers
-accelerate
-huggingface_hub
+git+https://github.com/huggingface/diffusers@v0.16.0#egg=diffusers
+transformers==4.28.1
+accelerate==0.18.0
+huggingface_hub==0.13.4
 
---extra-index-url https://download.pytorch.org/whl/cu118
+--extra-index-url https://download.pytorch.org/whl/cu117
 torch>=2.0
 
 # Original SD checkpoint conversion
-pytorch-lightning
-tensorboard
+pytorch-lightning==2.0.1.post0
+tensorboard==2.12.2
 
-scipy # LMSDiscreteScheduler
+scipy==1.10.1 # LMSDiscreteScheduler
 
-stability-sdk # DreamStudio
+stability-sdk==0.6.1 # DreamStudio
 
 opencolorio==2.1.2 # color management
