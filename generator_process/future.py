@@ -91,14 +91,21 @@ class Future:
         """
         Mark the future as done.
         """
+        import bpy
+
         assert not self.done
         self.done = True
         self._done_event.set()
+
         if self._exception is None or self.call_done_on_exception:
-            def run_callbacks():
+            if bpy.app.background:
                 for done_callback in self._done_callbacks:
                     done_callback(self)
-            self._run_on_main_thread(run_callbacks)
+            else:
+                def run_callbacks():
+                    for done_callback in self._done_callbacks:
+                        done_callback(self)
+                self._run_on_main_thread(run_callbacks)
 
     def add_response_callback(self, callback: Callable[['Future', Any], None]):
         """

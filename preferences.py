@@ -1,4 +1,5 @@
 import bpy
+import threading
 from bpy.props import CollectionProperty, StringProperty
 from bpy_extras.io_utils import ImportHelper
 import os
@@ -123,25 +124,39 @@ class InstallModel(bpy.types.Operator):
     prefer_fp16_revision: bpy.props.BoolProperty(name="", default=True)
 
     def execute(self, context):
+        global is_downloading
+
         if os.path.exists(self.model):
             webbrowser.open(f"file://{self.model}")
         else:
-            global is_downloading
             is_downloading = True
             f = Generator.shared().hf_snapshot_download(self.model, bpy.context.preferences.addons[__package__].preferences.hf_token, "fp16" if self.prefer_fp16_revision else None)
+            
             def on_progress(_, response: DownloadStatus):
                 bpy.context.preferences.addons[__package__].preferences.download_file = response.file
                 bpy.context.preferences.addons[__package__].preferences.download_progress = int((response.index / response.total) * 100)
+            
             def on_done(future):
                 global is_downloading
                 is_downloading = False
+
                 set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+            
             def on_exception(_, exception):
+                global is_downloading
+                is_downloading = False
+                
                 self.report({"ERROR"}, str(exception))
                 raise exception
+            
             f.add_response_callback(on_progress)
             f.add_done_callback(on_done)
             f.add_exception_callback(on_exception)
+            
+            if bpy.app.background:
+                while is_downloading:
+                    pass
+
         return {"FINISHED"}
 
 def _model_search(self, context):
