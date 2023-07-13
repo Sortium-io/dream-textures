@@ -102,6 +102,13 @@ class Upscale(bpy.types.Operator):
             if tile.image is None:
                 return
             image = bpy_image(f"{input_image.name} (Upscaled)", tile.image.shape[1], tile.image.shape[0], tile.image.ravel(), last_data_block)
+
+            # Create new image for upscaling output
+            print("Looking for Upscaling Upscaling Output", image)
+            upscaling_image_output = bpy.data.images.new(name="Upscaling Image Temp", width=image.size[0], height=image.size[1])
+            upscaling_image_output.pixels = image.pixels[:]
+            print("Upscaling Output", upscaling_image_output)
+
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = image
